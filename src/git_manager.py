@@ -3,11 +3,13 @@
 import os
 import subprocess
 import logging
+import shutil
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 TAILWIND_REPO_URL = "https://github.com/tailwindlabs/tailwindcss.com.git"
+DEFAULT_BRANCH = "master"
 
 
 def clone_or_update(target_path: str) -> bool:
@@ -24,7 +26,40 @@ def clone_or_update(target_path: str) -> bool:
 
     try:
         if target_dir.exists() and (target_dir / ".git").exists():
-            logger.info(f"Repository already exists at {target_path}, updating...")
+            logger.info(f"Repository already exists at {target_path}, checking state...")
+
+            # Check current branch
+            branch_check = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=target_path,
+                capture_output=True,
+                text=True
+            )
+
+            current_branch = branch_check.stdout.strip()
+
+            # If in detached HEAD state or not on default branch, fix it
+            if current_branch == "HEAD" or branch_check.returncode != 0:
+                logger.warning(f"Repository in detached HEAD state, attempting to fix...")
+
+                # Try to checkout the default branch
+                try:
+                    subprocess.run(
+                        ["git", "checkout", DEFAULT_BRANCH],
+                        cwd=target_path,
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    logger.info(f"Checked out {DEFAULT_BRANCH} branch")
+                except subprocess.CalledProcessError as e:
+                    # If checkout fails, delete and re-clone
+                    logger.warning(f"Failed to checkout {DEFAULT_BRANCH}, removing and re-cloning...")
+                    shutil.rmtree(target_path)
+                    return clone_or_update(target_path)
+
+            # Now try to pull updates
+            logger.info("Pulling latest changes...")
             result = subprocess.run(
                 ["git", "pull"],
                 cwd=target_path,
@@ -39,7 +74,7 @@ def clone_or_update(target_path: str) -> bool:
             logger.info(f"Cloning repository to {target_path}...")
             target_dir.mkdir(parents=True, exist_ok=True)
             result = subprocess.run(
-                ["git", "clone", TAILWIND_REPO_URL, str(target_path)],
+                ["git", "clone", "--branch", DEFAULT_BRANCH, TAILWIND_REPO_URL, str(target_path)],
                 capture_output=True,
                 text=True,
                 check=True
