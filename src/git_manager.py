@@ -75,7 +75,7 @@ def clone_or_update(target_path: str) -> bool:
             logger.info(f"Cloning repository to {target_path}...")
             target_dir.mkdir(parents=True, exist_ok=True)
             result = subprocess.run(
-                ["git", "clone", "--branch", DEFAULT_BRANCH, TAILWIND_REPO_URL, str(target_path)],
+                ["git", "clone", "--depth", "1", "--branch", DEFAULT_BRANCH, TAILWIND_REPO_URL, str(target_path)],
                 capture_output=True,
                 text=True,
                 check=True,
