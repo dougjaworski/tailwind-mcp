@@ -101,7 +101,7 @@ def get_docs_path(repo_path: str) -> Path:
     Returns:
         Path: Path to the docs directory
     """
-    return Path(repo_path) / "src" / "pages" / "docs"
+    return Path(repo_path) / "src" / "docs"
 
 
 def is_repo_ready(repo_path: str) -> bool:
