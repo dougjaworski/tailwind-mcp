@@ -1,39 +1,76 @@
 # Tailwind CSS MCP Server
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io)
+
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that provides AI assistants with comprehensive access to Tailwind CSS documentation. This enables Claude and other MCP-compatible AI assistants to accurately reference Tailwind documentation, provide code examples, and suggest the right utility classes for your projects.
 
 Built with [FastMCP](https://github.com/jlowin/fastmcp) and designed for both local and remote access via HTTP transport.
 
+---
+
+## Table of Contents
+
+- [Why Use This?](#why-use-this)
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Using Docker Compose (Recommended)](#using-docker-compose-recommended)
+  - [Manual Docker Build](#manual-docker-build)
+- [Configuration](#configuration)
+  - [Environment Variables](#environment-variables)
+  - [Configuration Examples](#configuration-examples)
+- [Connecting from Claude Code](#connecting-from-claude-code)
+- [Available Tools](#available-tools)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Performance](#performance)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [Credits](#credits)
+
+---
+
 ## Why Use This?
 
 When working with Tailwind CSS, AI assistants often:
-- Suggest outdated or incorrect utility class names
-- Miss newer Tailwind features and variants
-- Can't reference specific examples from official documentation
+- ❌ Suggest outdated or incorrect utility class names
+- ❌ Miss newer Tailwind features and variants
+- ❌ Can't reference specific examples from official documentation
 
 This MCP server solves these problems by giving AI assistants direct access to:
-- Complete, up-to-date Tailwind CSS documentation
-- Real code examples from official docs
-- Utility class definitions and usage patterns
-- Variant and modifier documentation (hover, dark mode, responsive, etc.)
+- ✅ Complete, up-to-date Tailwind CSS documentation
+- ✅ Real code examples from official docs
+- ✅ Utility class definitions and usage patterns
+- ✅ Variant and modifier documentation (hover, dark mode, responsive, etc.)
+
+---
 
 ## Features
 
-- **Full-text search** using SQLite FTS5 with BM25 ranking
-- **Utility class lookup** to find documentation for specific Tailwind classes
-- **Section browsing** to explore documentation by category
-- **Complete documentation retrieval** by slug for in-depth understanding
-- **Code example extraction** to see real-world usage patterns
-- **Variant/modifier search** to learn about hover, dark mode, responsive design, and more
-- **Auto-updating** documentation from the official Tailwind CSS repository
-- **Docker-based** deployment with volume persistence
-- **HTTP transport** for remote access from Claude Code
+- 🔍 **Full-text search** using SQLite FTS5 with BM25 ranking
+- 🎯 **Utility class lookup** to find documentation for specific Tailwind classes
+- 📚 **Section browsing** to explore documentation by category
+- 📖 **Complete documentation retrieval** by slug for in-depth understanding
+- 💻 **Code example extraction** to see real-world usage patterns
+- 🎨 **Variant/modifier search** to learn about hover, dark mode, responsive design, and more
+- 🔄 **Auto-updating** documentation from the official Tailwind CSS repository
+- 🐳 **Docker-based** deployment with volume persistence
+- 🌐 **HTTP transport** for local and remote access
+
+---
 
 ## Quick Start
 
 ### Using Docker Compose (Recommended)
 
 ```bash
+# Clone the repository
+git clone https://github.com/dougjaworski/tailwind-mcp.git
+cd tailwind-mcp
+
 # Copy and customize the environment configuration
 cp .env.example .env
 # Edit .env with your preferred settings (optional)
@@ -48,9 +85,9 @@ docker-compose logs -f
 docker-compose down
 ```
 
-On first run, the server will:
-1. Clone the Tailwind CSS documentation repository
-2. Parse all MDX files and build the search index
+**On first run, the server will:**
+1. Clone the Tailwind CSS documentation repository (~30 seconds)
+2. Parse all MDX files and build the search index (~30 seconds)
 3. Start the MCP server on the configured port (default: 8000)
 
 ### Manual Docker Build
@@ -63,9 +100,12 @@ docker build -t tailwind-mcp .
 docker run -d \
   -p 8000:8000 \
   -v tailwind-docs:/app/data \
+  --env-file .env \
   --name tailwind-mcp \
   tailwind-mcp
 ```
+
+---
 
 ## Configuration
 
@@ -102,6 +142,8 @@ MCP_ALLOWED_HOSTS=localhost:*,127.0.0.1:*,myserver:*,myserver.example.com:*
 MCP_PORT=9000
 ```
 
+---
+
 ## Connecting from Claude Code
 
 Add the following to your Claude Code MCP settings (`.mcp.json`):
@@ -130,209 +172,82 @@ Add the following to your Claude Code MCP settings (`.mcp.json`):
 }
 ```
 
-Note: When connecting remotely, make sure `your-server-hostname` is included in the `MCP_ALLOWED_HOSTS` environment variable.
+> **Note:** When connecting remotely, make sure `your-server-hostname` is included in the `MCP_ALLOWED_HOSTS` environment variable.
+
+---
 
 ## Available Tools
 
-### 1. search_docs
+The server provides 8 MCP tools for accessing Tailwind CSS documentation:
 
+### 1. `search_docs`
 Search the Tailwind CSS documentation using full-text search.
 
 **Parameters:**
 - `query` (string): Search query (supports FTS5 syntax)
 - `limit` (int, optional): Maximum results to return (default: 10, max: 50)
 
-**Example:**
-```
-Search for flexbox utilities
-```
+**Returns:** List of search results with snippets, URLs, and relevance scores.
 
-**Returns:**
-```json
-[
-  {
-    "file": "src/pages/docs/flex.mdx",
-    "title": "Flex",
-    "section": "Layout",
-    "description": "Utilities for controlling flex properties",
-    "snippet": "Use flex-1 to allow a flex item to grow...",
-    "url": "https://tailwindcss.com/docs/flex",
-    "relevance_score": 0.85
-  }
-]
-```
-
-### 2. get_utility_class
-
-Find documentation for a specific Tailwind CSS utility class.
+### 2. `get_utility_class`
+Find documentation pages for a specific Tailwind CSS utility class.
 
 **Parameters:**
 - `class_name` (string): Utility class name (e.g., "flex-1", "text-center")
 
-**Example:**
-```
-Find docs for "flex-1"
-```
+**Returns:** List of documentation pages that reference this class.
 
-**Returns:**
-```json
-[
-  {
-    "file": "src/pages/docs/flex.mdx",
-    "title": "Flex",
-    "section": "Layout",
-    "url": "https://tailwindcss.com/docs/flex",
-    "utility_class": "flex-1"
-  }
-]
-```
-
-### 3. list_sections
-
+### 3. `list_sections`
 Get a list of all documentation sections.
 
-**Parameters:** None
+**Returns:** Array of section names (e.g., ["Core", "Layout", "Typography"]).
 
-**Returns:**
-```json
-[
-  "Core",
-  "Layout",
-  "Typography",
-  "Backgrounds",
-  "Borders",
-  ...
-]
-```
-
-### 4. get_section_docs
-
+### 4. `get_section_docs`
 Get all documentation pages in a specific section.
 
 **Parameters:**
 - `section` (string): Section name (use list_sections to see available sections)
 
-**Example:**
-```
-Get all docs in "Layout" section
-```
+**Returns:** List of documents in the section.
 
-**Returns:**
-```json
-[
-  {
-    "file": "src/pages/docs/flex.mdx",
-    "title": "Flex",
-    "section": "Layout",
-    "description": "Utilities for controlling flex properties",
-    "url": "https://tailwindcss.com/docs/flex"
-  }
-]
-```
-
-### 5. get_full_doc
-
+### 5. `get_full_doc`
 Get complete documentation for a specific Tailwind CSS concept by slug.
 
 **Parameters:**
 - `slug` (string): Documentation page slug (e.g., "flex", "grid", "text-align")
 
-**Example:**
-```
-Get full documentation for "flex"
-```
+**Returns:** Complete document with content, code examples, and metadata.
 
-**Returns:**
-```json
-{
-  "file": "src/pages/docs/flex.mdx",
-  "title": "Flex",
-  "section": "Layout",
-  "description": "Utilities for controlling flex properties",
-  "content": "Full markdown content...",
-  "url": "https://tailwindcss.com/docs/flex",
-  "utility_classes": ["flex-1", "flex-auto", "flex-initial", "flex-none"],
-  "code_examples": ["<div class=\"flex-1\">...</div>", ...]
-}
-```
-
-### 6. get_examples
-
+### 6. `get_examples`
 Get code examples from documentation that match a query.
 
 **Parameters:**
 - `query` (string): Search query for finding relevant code examples
 - `limit` (int, optional): Maximum results to return (default: 5, max: 10)
 
-**Example:**
-```
-Get code examples for "flexbox layout"
-```
+**Returns:** List of documents with code examples showing real usage patterns.
 
-**Returns:**
-```json
-[
-  {
-    "file": "src/pages/docs/flex.mdx",
-    "title": "Flex",
-    "section": "Layout",
-    "url": "https://tailwindcss.com/docs/flex",
-    "code_examples": [
-      "<div class=\"flex\">\n  <div class=\"flex-1\">01</div>\n  <div class=\"flex-1\">02</div>\n</div>"
-    ],
-    "relevance_score": 0.85
-  }
-]
-```
-
-### 7. search_by_variant
-
+### 7. `search_by_variant`
 Search for documentation about Tailwind variants and modifiers.
 
 **Parameters:**
-- `variant` (string): Variant name (e.g., "hover", "dark", "responsive", "sm", "group", "focus")
+- `variant` (string): Variant name (e.g., "hover", "dark", "responsive", "sm")
 - `limit` (int, optional): Maximum results to return (default: 10, max: 20)
 
-**Example:**
-```
-Search for "hover" variant documentation
-```
+**Returns:** List of documents explaining how to use the variant/modifier.
 
-**Returns:**
-```json
-[
-  {
-    "file": "src/pages/docs/hover-focus-and-other-states.mdx",
-    "title": "Hover, Focus, and Other States",
-    "section": "Core",
-    "description": "Style elements on hover, focus, and more",
-    "snippet": "Use the <mark>hover:</mark> modifier to style on hover...",
-    "url": "https://tailwindcss.com/docs/hover-focus-and-other-states",
-    "relevance_score": 0.92,
-    "variant_type": "hover"
-  }
-]
-```
-
-### 8. refresh_docs
-
+### 8. `refresh_docs`
 Update documentation from GitHub and rebuild the search index.
 
-**Parameters:** None
+**Returns:** Status message indicating success or failure.
 
-**Returns:**
-```json
-{
-  "success": true,
-  "message": "Documentation updated and index rebuilt successfully"
-}
-```
+---
 
 ## Architecture
 
 ### Components
 
-- **FastMCP**: Server framework with SSE transport
+- **FastMCP**: Server framework with HTTP transport
 - **SQLite FTS5**: Full-text search engine with BM25 ranking
 - **python-frontmatter**: YAML metadata extraction from MDX files
 - **Git**: Repository management for documentation updates
@@ -343,23 +258,6 @@ Update documentation from GitHub and rebuild the search index.
 2. **Search**: Client query → FTS5 search → Format results → Return to client
 3. **Lookup**: Class name → Query metadata → Return matching docs
 4. **Refresh**: Git pull → Re-parse files → Rebuild index
-
-### File Structure
-
-```
-tailwind-mcp/
-├── src/
-│   ├── __init__.py
-│   ├── server.py         # FastMCP server with tool definitions
-│   ├── indexer.py        # SQLite FTS5 index builder
-│   ├── parser.py         # MDX file parser
-│   ├── search.py         # Search engine
-│   └── git_manager.py    # Git operations
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── README.md
-```
 
 ### Database Schema
 
@@ -383,35 +281,7 @@ CREATE TABLE doc_metadata (
 );
 ```
 
-## Troubleshooting
-
-### Server won't start
-
-Check logs for errors:
-```bash
-docker-compose logs -f
-```
-
-Common issues:
-- Port 8000 already in use: Change port mapping in docker-compose.yml
-- Git clone failed: Check network connectivity
-- Permission issues: Ensure volume is writable
-
-### Search returns no results
-
-1. Verify index was built:
-```bash
-docker-compose exec tailwind-mcp ls -la /app/data
-```
-
-2. Rebuild index:
-```bash
-# Use the refresh_docs tool from Claude Code
-```
-
-### Health check failing
-
-The health check endpoint may not be implemented. You can modify the Dockerfile to remove the health check or add a simple health endpoint to the FastMCP server.
+---
 
 ## Development
 
@@ -427,6 +297,7 @@ pip install -r requirements.txt
 
 # Set environment variables
 export DATA_DIR=./data
+export MCP_PORT=8000
 
 # Run server
 python -m src.server
@@ -434,47 +305,107 @@ python -m src.server
 
 ### Running Tests
 
-Tests can be added using pytest:
-
 ```bash
 pip install pytest
 pytest tests/
 ```
 
+---
+
 ## Performance
 
-- **First startup**: 1-2 minutes (cloning repo + building index)
-- **Subsequent startups**: <5 seconds (uses cached data)
-- **Search queries**: <100ms for typical queries
-- **Index size**: ~5-10 MB for full documentation
+| Metric | Time |
+|--------|------|
+| **First startup** | 1-2 minutes (cloning repo + building index) |
+| **Subsequent startups** | <5 seconds (uses cached data) |
+| **Search queries** | <100ms for typical queries |
+| **Index size** | ~5-10 MB for full documentation |
+| **Documents indexed** | ~185 Tailwind CSS documentation pages |
 
-## Updates
+---
 
-To update to the latest Tailwind CSS documentation:
+## Troubleshooting
 
-1. Use the `refresh_docs` tool from Claude Code, or
-2. Delete the volume and restart:
+### Server won't start
+
+Check logs for errors:
 ```bash
+docker-compose logs -f
+```
+
+**Common issues:**
+- Port 8000 already in use: Change `MCP_PORT` in `.env`
+- Git clone failed: Check network connectivity
+- Permission issues: Ensure volume is writable
+
+### Search returns no results
+
+1. Verify index was built:
+   ```bash
+   docker-compose exec tailwind-mcp ls -la /app/data
+   ```
+
+2. Rebuild index using the `refresh_docs` tool from Claude Code
+
+### Connection refused from Claude Code
+
+1. Verify server is running: `docker-compose ps`
+2. Check your hostname is in `MCP_ALLOWED_HOSTS`
+3. Verify firewall rules allow port 8000
+
+### Update to latest Tailwind CSS documentation
+
+```bash
+# Option 1: Use the refresh_docs tool from Claude Code
+
+# Option 2: Delete the volume and restart
 docker-compose down -v
 docker-compose up -d
 ```
 
-## License
-
-MIT License - See LICENSE file for details.
-
-The Tailwind CSS documentation accessed by this server is © Tailwind Labs Inc. This project is not affiliated with or endorsed by Tailwind Labs.
+---
 
 ## Contributing
 
 Contributions are welcome! Please feel free to:
-- Report bugs or issues
-- Suggest new features
-- Submit pull requests
-- Improve documentation
+
+- 🐛 Report bugs or issues
+- 💡 Suggest new features or improvements
+- 📝 Improve documentation
+- 🔧 Submit pull requests
+
+### Development Guidelines
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Test thoroughly
+5. Commit your changes (`git commit -m 'Add some amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+---
+
+## License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+
+The Tailwind CSS documentation accessed by this server is © Tailwind Labs Inc. This project is not affiliated with or endorsed by Tailwind Labs.
+
+---
 
 ## Credits
 
 - Built with [FastMCP](https://github.com/jlowin/fastmcp)
 - Documentation from [Tailwind CSS](https://tailwindcss.com)
 - Powered by [Model Context Protocol](https://modelcontextprotocol.io)
+
+---
+
+<div align="center">
+
+**Made with ❤️ for the Tailwind CSS community**
+
+[Report Bug](https://github.com/dougjaworski/tailwind-mcp/issues) · [Request Feature](https://github.com/dougjaworski/tailwind-mcp/issues) · [Documentation](https://github.com/dougjaworski/tailwind-mcp#readme)
+
+</div>
