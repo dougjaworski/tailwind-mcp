@@ -1,0 +1,2 @@
+fastmcp>=0.2.0
+python-frontmatter>=1.0.0

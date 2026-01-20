@@ -1,0 +1,17 @@
+services:
+  tailwind-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tailwind-mcp
+    ports:
+      - "${MCP_PORT:-8000}:${MCP_PORT:-8000}"
+    volumes:
+      - tailwind-docs:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  tailwind-docs:
+    driver: local
