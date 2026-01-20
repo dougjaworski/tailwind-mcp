@@ -9,7 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 TAILWIND_REPO_URL = "https://github.com/tailwindlabs/tailwindcss.com.git"
-DEFAULT_BRANCH = "master"
+DEFAULT_BRANCH = "main"
 
 
 def clone_or_update(target_path: str) -> bool:
@@ -101,7 +101,7 @@ def get_docs_path(repo_path: str) -> Path:
     Returns:
         Path: Path to the docs directory
     """
-    return Path(repo_path) / "src" / "docs"
+    return Path(repo_path) / "src" / "pages" / "docs"
 
 
 def is_repo_ready(repo_path: str) -> bool:
