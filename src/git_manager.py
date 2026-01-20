@@ -65,7 +65,8 @@ def clone_or_update(target_path: str) -> bool:
                 cwd=target_path,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                timeout=120
             )
             logger.info(f"Git pull output: {result.stdout}")
             logger.info("Repository updated successfully")
@@ -77,12 +78,16 @@ def clone_or_update(target_path: str) -> bool:
                 ["git", "clone", "--branch", DEFAULT_BRANCH, TAILWIND_REPO_URL, str(target_path)],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                timeout=120
             )
             logger.info(f"Git clone output: {result.stdout}")
             logger.info("Repository cloned successfully")
             return True
 
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Git operation timed out after 120 seconds")
+        return False
     except subprocess.CalledProcessError as e:
         logger.error(f"Git operation failed: {e.stderr}")
         return False
