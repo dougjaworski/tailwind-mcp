@@ -27,6 +27,7 @@ Built with [FastMCP](https://github.com/jlowin/fastmcp) and designed for both lo
 - [Development](#development)
 - [Performance](#performance)
 - [Troubleshooting](#troubleshooting)
+- [Security Considerations](#security-considerations)
 - [Contributing](#contributing)
 - [License](#license)
 - [Credits](#credits)
@@ -362,6 +363,136 @@ docker-compose logs -f
 docker-compose down -v
 docker-compose up -d
 ```
+
+---
+
+## Security Considerations
+
+### Intended Deployment Model
+
+This MCP server is designed for **local and trusted network environments**:
+
+- ✅ Local Docker containers on your development machine
+- ✅ Internal network servers without internet exposure
+- ✅ Personal or team development environments
+- ✅ Trusted internal infrastructure
+
+**This server is NOT designed to be exposed directly to the internet** without additional security hardening.
+
+### Current Security Posture
+
+The default configuration prioritizes ease of use for local development:
+
+- **No Authentication**: All MCP tools are accessible without authentication
+- **No Rate Limiting**: No built-in protection against resource exhaustion
+- **HTTP Only**: No TLS/HTTPS encryption by default
+- **Host Network Mode**: Container runs in host network mode for MCP compatibility
+- **Read-Only Operations**: Server only reads documentation (no user data storage)
+
+### Hardening for Production/Internet Exposure
+
+If you plan to expose this MCP server beyond a trusted local network, consider implementing these security measures:
+
+#### 1. Add Authentication
+
+Implement an authentication layer:
+- API key authentication via reverse proxy (nginx, Traefik)
+- OAuth2/OIDC integration for user authentication
+- Firewall rules limiting access to specific IP addresses
+
+#### 2. Enable TLS/HTTPS
+
+Add a reverse proxy with TLS termination:
+```yaml
+# Example: nginx with Let's Encrypt
+# Place nginx in front of the MCP server
+# Configure TLS certificates
+# Proxy requests to http://localhost:8000
+```
+
+#### 3. Implement Rate Limiting
+
+Protect against resource exhaustion:
+- Configure rate limiting in your reverse proxy
+- Suggested: 100 requests/minute per IP address
+- Monitor for unusual query patterns
+
+#### 4. Network Isolation
+
+Improve container network security:
+```yaml
+# docker-compose.yml
+services:
+  tailwind-mcp:
+    # Change from host to bridge mode
+    # network_mode: host  # Remove this
+    ports:
+      - "127.0.0.1:8000:8000"  # Bind to localhost only
+    networks:
+      - internal  # Use isolated network
+
+networks:
+  internal:
+    driver: bridge
+```
+
+#### 5. Input Validation
+
+Add additional validation layers:
+- Limit query string lengths (e.g., max 500 characters)
+- Validate slug names against whitelist
+- Sanitize all user inputs before logging
+
+#### 6. Monitoring and Logging
+
+Implement security monitoring:
+- Monitor access logs for unusual patterns
+- Set up alerts for high request volumes
+- Regularly audit who is accessing the server
+- Store logs in a secure, access-controlled location
+
+#### 7. Restrict Dangerous Operations
+
+For internet-exposed deployments:
+- Disable or restrict the `refresh_docs` tool (triggers git clone operations)
+- Consider making it admin-only via proxy authentication
+
+#### 8. Regular Updates
+
+Maintain security over time:
+- Run `pip audit` regularly to check for vulnerable dependencies
+- Subscribe to security advisories for FastMCP and dependencies
+- Rebuild Docker images monthly to get latest security patches
+- Monitor the [FastMCP security advisories](https://github.com/jlowin/fastmcp/security)
+
+### Security Best Practices
+
+Even for local deployments:
+
+1. **Principle of Least Privilege**: Run container as non-root user (already configured)
+2. **Network Segmentation**: Keep the Docker host on a separate network segment if possible
+3. **Regular Backups**: Although this is a read-only service, backup your database volume
+4. **Audit Trail**: Review logs periodically for unusual activity
+5. **Update Dependencies**: Keep FastMCP and Python dependencies up to date
+
+### Reporting Security Issues
+
+If you discover a security vulnerability in this project, please report it responsibly:
+
+1. **DO NOT** open a public GitHub issue
+2. Email security concerns to the repository maintainer
+3. Include details: vulnerability description, reproduction steps, potential impact
+4. Allow reasonable time for a fix before public disclosure
+
+### Compliance and Regulatory Considerations
+
+If you're subject to compliance requirements (HIPAA, SOC 2, PCI-DSS, etc.):
+
+- This server stores no user data or PII
+- All data comes from public Tailwind CSS documentation
+- Implement additional controls based on your compliance framework
+- Conduct a security assessment before production use
+- Document your deployment architecture and security controls
 
 ---
 
