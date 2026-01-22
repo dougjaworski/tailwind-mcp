@@ -3,10 +3,11 @@
 import os
 import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Annotated, List, Dict, Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import Field
 
 from .git_manager import clone_or_update, is_repo_ready
 from .indexer import rebuild_index
@@ -41,9 +42,13 @@ logger = logging.getLogger(__name__)
 REPO_PATH = os.path.join(DATA_DIR, "tailwindcss.com")
 DB_PATH = os.path.join(DATA_DIR, "tailwind_docs.db")
 
-# Initialize FastMCP server with security settings
+# Initialize FastMCP server with enhanced description
 mcp = FastMCP(
-    "Tailwind CSS Documentation",
+    "Tailwind CSS Documentation Server - "
+    "Use this MCP server when users ask about Tailwind CSS utility classes, styling, or need documentation. "
+    "Provides: Complete Tailwind CSS documentation with full-text search, utility class lookups, "
+    "code examples, variant/modifier documentation (hover, dark mode, responsive), breakpoint information, "
+    "and detailed guides for layout, typography, colors, spacing, and all Tailwind features.",
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=allowed_hosts_list,
@@ -84,16 +89,51 @@ def initialize_server():
 
 
 @mcp.tool()
-def search_docs(query: str, limit: int = 10) -> List[Dict[str, Any]]:
+def search_docs(
+    query: Annotated[str, Field(
+        description="Search terms for finding Tailwind CSS documentation - utility classes, concepts, or features",
+        min_length=1,
+        max_length=200,
+        examples=["flexbox", "text-center", "dark mode", "responsive design", "grid layout", "hover effects"]
+    )],
+    limit: Annotated[int, Field(
+        description="Maximum number of search results to return",
+        ge=1,
+        le=50,
+        default=10
+    )] = 10
+) -> List[Dict[str, Any]]:
     """
-    Search Tailwind CSS documentation using full-text search.
+    Search Tailwind CSS documentation using full-text search with BM25 ranking.
+
+    Use this when the user asks general questions about Tailwind:
+    - "How do I center elements in Tailwind?"
+    - "What are Tailwind's color utilities?"
+    - "How does the grid system work?"
+    - "Show me Tailwind flexbox utilities"
+    - "How do I make responsive layouts?"
+
+    This tool searches across ALL Tailwind documentation including layout, typography,
+    backgrounds, borders, effects, filters, transitions, and more. Use this for broad
+    exploration or when you're not sure which specific utility class to use.
+
+    For specific utility class lookups (e.g., "text-center", "bg-blue-500"), use get_utility_class() instead.
+    For variant/modifier documentation (hover, dark, responsive), use search_by_variant() instead.
+    For code examples, use get_examples() instead.
 
     Args:
-        query: Search query string (supports FTS5 syntax)
-        limit: Maximum number of results to return (default: 10, max: 50)
+        query: What to search for - utility classes, CSS concepts, Tailwind features, or general terms.
+               Works best with specific terms like "flexbox", "text alignment", or "responsive breakpoints"
+        limit: How many results to return (default: 10, max: 50)
 
     Returns:
-        List of search results with title, section, snippet, URL, and relevance score
+        List of search results, each containing:
+        - title: Document title
+        - section: Documentation section (e.g., "Layout", "Typography", "Backgrounds")
+        - snippet: Relevant excerpt from the documentation
+        - url: Link to official Tailwind CSS documentation
+        - score: Relevance score (higher is more relevant)
+        - utility_classes: List of utility classes mentioned in this document
     """
     logger.info(f"Searching for: {query}")
 
@@ -105,22 +145,62 @@ def search_docs(query: str, limit: int = 10) -> List[Dict[str, Any]]:
     if not results:
         return [{
             "message": f"No results found for query: {query}",
-            "suggestion": "Try different keywords or check the spelling"
+            "suggestion": "Try different keywords or check the spelling. For specific utility classes, use get_utility_class() instead."
         }]
 
     return results
 
 
 @mcp.tool()
-def get_utility_class(class_name: str) -> List[Dict[str, Any]]:
+def get_utility_class(
+    class_name: Annotated[str, Field(
+        description="Tailwind CSS utility class name to look up",
+        pattern="^[a-z0-9-/\\[\\]:.%]+$",
+        min_length=1,
+        max_length=100,
+        examples=["flex-1", "text-center", "bg-blue-500", "p-4", "w-full", "hover:bg-gray-100", "md:grid-cols-3"]
+    )]
+) -> List[Dict[str, Any]]:
     """
-    Find documentation pages for a specific Tailwind CSS utility class.
+    Find documentation for a specific Tailwind CSS utility class.
+
+    Use this when the user asks about a SPECIFIC utility class:
+    - "What does flex-1 do?"
+    - "How do I use text-center?"
+    - "Explain bg-blue-500"
+    - "What is the p-4 class?"
+    - "Show me documentation for w-full"
+
+    Tailwind utility classes are the core of the framework. This tool finds the
+    documentation pages that define, explain, or demonstrate a specific class.
+
+    Common utility patterns:
+    - Layout: flex, grid, block, inline, hidden, w-*, h-*
+    - Spacing: p-*, m-*, space-x-*, gap-*
+    - Typography: text-*, font-*, leading-*, tracking-*
+    - Colors: bg-*, text-*, border-*, from-*, to-*
+    - Borders: border-*, rounded-*, ring-*
+    - Effects: shadow-*, opacity-*, blur-*
+    - Responsive: sm:*, md:*, lg:*, xl:*, 2xl:*
+    - States: hover:*, focus:*, active:*, disabled:*
+    - Dark mode: dark:*
+
+    For general searches, use search_docs() instead.
+    For variant/modifier documentation, use search_by_variant() instead.
 
     Args:
-        class_name: Utility class name (e.g., "flex-1", "text-center", "bg-blue-500")
+        class_name: The exact utility class name to look up
+                   Examples: "flex-1", "text-center", "bg-blue-500", "hover:bg-gray-100"
+                   Can include variants: "md:grid-cols-3", "dark:bg-gray-800"
 
     Returns:
-        List of documentation pages that reference this utility class
+        List of documentation pages referencing this class, each with:
+        - title: Document title
+        - section: Documentation section
+        - content: Documentation text explaining the utility
+        - url: Link to official Tailwind docs
+        - related_classes: Other utility classes in the same family
+        - code_examples: Example usage of the class
     """
     logger.info(f"Looking up utility class: {class_name}")
 
@@ -129,7 +209,7 @@ def get_utility_class(class_name: str) -> List[Dict[str, Any]]:
     if not results:
         return [{
             "message": f"No documentation found for utility class: {class_name}",
-            "suggestion": "Verify the class name or try searching for related terms"
+            "suggestion": "Verify the class name spelling or try search_docs() for related concepts. Remember Tailwind classes are lowercase with hyphens."
         }]
 
     return results
@@ -138,10 +218,23 @@ def get_utility_class(class_name: str) -> List[Dict[str, Any]]:
 @mcp.tool()
 def list_sections() -> List[str]:
     """
-    List all available documentation sections.
+    List all available documentation sections in Tailwind CSS.
+
+    Use this when the user wants to:
+    - Explore what's available in Tailwind documentation
+    - Browse documentation by category
+    - Understand Tailwind's organization
+    - "What sections are in Tailwind docs?"
+    - "Show me all documentation categories"
+    - "What topics does Tailwind cover?"
+
+    Typical sections include: Layout, Flexbox, Grid, Spacing, Sizing, Typography,
+    Backgrounds, Borders, Effects, Filters, Tables, Transitions, Transforms, etc.
+
+    Use get_section_docs() after this to retrieve all documents in a specific section.
 
     Returns:
-        List of section names (e.g., ["Layout", "Typography", "Backgrounds", ...])
+        List of section names (e.g., ["Layout", "Flexbox", "Grid", "Typography", ...])
     """
     logger.info("Listing all sections")
 
@@ -154,15 +247,42 @@ def list_sections() -> List[str]:
 
 
 @mcp.tool()
-def get_section_docs(section: str) -> List[Dict[str, Any]]:
+def get_section_docs(
+    section: Annotated[str, Field(
+        description="Section name to retrieve documents from",
+        min_length=2,
+        max_length=50,
+        examples=["Layout", "Typography", "Backgrounds", "Flexbox", "Grid", "Spacing", "Borders"]
+    )]
+) -> List[Dict[str, Any]]:
     """
-    Get all documentation pages in a specific section.
+    Get all documentation pages within a specific section.
+
+    Use this when the user wants to:
+    - Browse all utilities in a category
+    - See what's available for a topic
+    - Explore a specific area of Tailwind
+    - "Show me all layout utilities"
+    - "What typography options does Tailwind have?"
+    - "List all background utilities"
+
+    Common sections: Layout, Flexbox, Grid, Spacing, Sizing, Typography, Backgrounds,
+    Borders, Effects, Filters, Tables, Transitions, Transforms, Interactivity, SVG,
+    Accessibility
+
+    Use list_sections() first if you're not sure which sections are available.
 
     Args:
-        section: Section name (use list_sections to see available sections)
+        section: Section name (e.g., "Layout", "Typography", "Backgrounds", "Flexbox")
+                Use list_sections() to see all available sections
 
     Returns:
-        List of documentation pages in the section
+        List of all documentation pages in the section, each with:
+        - title: Document title
+        - slug: Document identifier (use with get_full_doc())
+        - description: Brief description
+        - url: Link to official Tailwind docs
+        - utility_count: Number of utility classes in this document
     """
     logger.info(f"Getting documents for section: {section}")
 
@@ -171,7 +291,7 @@ def get_section_docs(section: str) -> List[Dict[str, Any]]:
     if not results:
         return [{
             "message": f"No documents found in section: {section}",
-            "suggestion": "Use list_sections to see available sections"
+            "suggestion": "Use list_sections() to see available sections. Section names are case-sensitive."
         }]
 
     return results
@@ -180,10 +300,30 @@ def get_section_docs(section: str) -> List[Dict[str, Any]]:
 @mcp.tool()
 def refresh_docs() -> Dict[str, Any]:
     """
-    Update documentation from GitHub and rebuild the search index.
+    Update Tailwind CSS documentation from GitHub and rebuild the search index.
+
+    Use this when:
+    - Documentation seems outdated
+    - User explicitly requests to refresh/update docs
+    - Tailwind has released new versions
+    - "Update the Tailwind documentation"
+    - "Refresh docs from GitHub"
+
+    WARNING: This triggers network operations (git clone/pull) and database rebuilding.
+    It can take 30-60 seconds to complete. Use sparingly.
+
+    This will:
+    1. Pull latest Tailwind CSS documentation from GitHub
+    2. Rebuild the full-text search index
+    3. Re-index all utility classes and variants
+    4. Update all documentation pages
+
+    For internet-exposed deployments, consider restricting access to this tool.
 
     Returns:
-        Status message indicating success or failure
+        Dictionary with:
+        - success: Boolean indicating if refresh succeeded
+        - message: Status message explaining what happened
     """
     logger.info("Refreshing documentation...")
 
@@ -216,15 +356,47 @@ def refresh_docs() -> Dict[str, Any]:
 
 
 @mcp.tool()
-def get_full_doc(slug: str) -> Dict[str, Any]:
+def get_full_doc(
+    slug: Annotated[str, Field(
+        description="Document slug/identifier to retrieve",
+        pattern="^[a-z0-9-]+$",
+        min_length=2,
+        max_length=100,
+        examples=["flex", "grid", "text-align", "background-color", "padding", "hover-focus-and-other-states"]
+    )]
+) -> Dict[str, Any]:
     """
-    Get complete documentation for a specific Tailwind CSS concept by slug.
+    Get the complete documentation page for a specific Tailwind CSS concept by slug.
+
+    Use this when you need FULL, detailed documentation:
+    - After finding a document via search_docs() and want complete details
+    - When the user asks for comprehensive information
+    - To get all utility variations and examples for a feature
+    - "Give me full documentation for Tailwind flexbox"
+    - "I need complete details about grid"
+    - "Show me everything about text alignment"
+
+    This returns the entire documentation page including all text, code examples,
+    utility class variations, and configuration options. Use this when brief search
+    results aren't enough.
+
+    For quick searches, use search_docs() instead.
+    For specific utility classes, get_utility_class() might be more direct.
 
     Args:
-        slug: Documentation page slug (e.g., "flex", "grid", "text-align")
+        slug: Document identifier/slug (usually lowercase with hyphens)
+              Examples: "flex", "grid", "text-align", "padding", "border-radius"
+              You can get slugs from search_docs() or get_section_docs() results
 
     Returns:
-        Complete document with content, code examples, and metadata
+        Dictionary with complete documentation:
+        - title: Document title
+        - section: Documentation section
+        - content: Full documentation text
+        - utility_classes: All utility classes defined in this document
+        - code_examples: All code examples showing usage
+        - url: Link to official Tailwind docs
+        - related_docs: Links to related documentation pages
     """
     logger.info(f"Getting full documentation for slug: {slug}")
 
@@ -233,23 +405,55 @@ def get_full_doc(slug: str) -> Dict[str, Any]:
     if not result:
         return {
             "message": f"No documentation found for slug: {slug}",
-            "suggestion": "Try searching with search_docs or check the exact slug name"
+            "suggestion": "Try search_docs() to find similar documents. Slugs are usually lowercase with hyphens."
         }
 
     return result
 
 
 @mcp.tool()
-def get_examples(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+def get_examples(
+    query: Annotated[str, Field(
+        description="Search term for finding code examples",
+        min_length=1,
+        max_length=100,
+        examples=["flexbox layout", "grid template", "responsive navbar", "card design", "form styling"]
+    )],
+    limit: Annotated[int, Field(
+        description="Maximum number of examples to return",
+        ge=1,
+        le=10,
+        default=5
+    )] = 5
+) -> List[Dict[str, Any]]:
     """
-    Get code examples from documentation that match a query.
+    Search for and retrieve code examples from Tailwind CSS documentation.
+
+    Use this when the user needs working code:
+    - "Show me code examples for flexbox"
+    - "I need example code for a responsive grid"
+    - "Give me sample code for styling forms"
+    - "Show me how to build a card with Tailwind"
+    - "Code example for dark mode toggle"
+
+    This finds documentation pages with actual code snippets showing real-world
+    usage patterns. Focus is on practical examples rather than just definitions.
+
+    For text documentation, use search_docs() instead.
+    For specific utility class definitions, use get_utility_class() instead.
 
     Args:
-        query: Search query for finding relevant code examples
-        limit: Maximum number of results to return (default: 5, max: 10)
+        query: What type of code example you need (e.g., "grid layout", "responsive navbar", "form input")
+        limit: Maximum number of example-rich pages to return (default: 5, max: 10)
 
     Returns:
-        List of documents with code examples showing real usage patterns
+        List of documents with code examples, each containing:
+        - title: Document title
+        - section: Documentation section
+        - code_examples: Array of actual code snippets (HTML with Tailwind classes)
+        - utility_classes: Utility classes used in the examples
+        - description: What the examples demonstrate
+        - url: Link to official Tailwind docs
     """
     logger.info(f"Getting code examples for: {query}")
 
@@ -261,23 +465,77 @@ def get_examples(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     if not results:
         return [{
             "message": f"No code examples found for query: {query}",
-            "suggestion": "Try different keywords or use search_docs for general search"
+            "suggestion": "Try different keywords or use search_docs() for general documentation"
         }]
 
     return results
 
 
 @mcp.tool()
-def search_by_variant(variant: str, limit: int = 10) -> List[Dict[str, Any]]:
+def search_by_variant(
+    variant: Annotated[str, Field(
+        description="Variant or modifier name to search for",
+        pattern="^[a-z0-9-]+$",
+        min_length=2,
+        max_length=50,
+        examples=["hover", "focus", "active", "dark", "sm", "md", "lg", "group", "peer", "first", "last"]
+    )],
+    limit: Annotated[int, Field(
+        description="Maximum number of results to return",
+        ge=1,
+        le=20,
+        default=10
+    )] = 10
+) -> List[Dict[str, Any]]:
     """
     Search for documentation about Tailwind variants and modifiers.
 
+    Use this when the user asks about state variants, responsive design, or modifiers:
+    - "How does the hover variant work?"
+    - "Explain dark mode in Tailwind"
+    - "How do I use responsive breakpoints?"
+    - "What is the group modifier?"
+    - "Show me focus state documentation"
+
+    Tailwind variants modify how utilities behave in different contexts:
+
+    State variants:
+    - hover: Styles on mouse hover
+    - focus: Styles when element has focus
+    - active: Styles when element is active
+    - disabled: Styles for disabled elements
+    - visited: Styles for visited links
+
+    Responsive variants:
+    - sm: Small screens (640px+)
+    - md: Medium screens (768px+)
+    - lg: Large screens (1024px+)
+    - xl: Extra large (1280px+)
+    - 2xl: 2X large (1536px+)
+
+    Other variants:
+    - dark: Dark mode styles
+    - group: Style children based on parent state
+    - peer: Style siblings based on sibling state
+    - first, last: Position-based styles
+    - odd, even: Alternating styles
+
+    For utility class documentation, use get_utility_class() instead.
+    For general searches, use search_docs() instead.
+
     Args:
-        variant: Variant name (e.g., "hover", "dark", "responsive", "sm", "group", "focus")
+        variant: Variant name to search for (e.g., "hover", "dark", "sm", "group", "focus")
+                Must be lowercase without the colon (e.g., "hover" not "hover:")
         limit: Maximum number of results to return (default: 10, max: 20)
 
     Returns:
-        List of documents explaining how to use the variant/modifier
+        List of documents explaining the variant, each with:
+        - title: Document title
+        - section: Documentation section
+        - content: Explanation of how the variant works
+        - usage_examples: How to use the variant (e.g., "hover:bg-blue-500")
+        - compatible_utilities: Which utility classes work with this variant
+        - url: Link to official Tailwind docs
     """
     logger.info(f"Searching for variant: {variant}")
 
@@ -289,7 +547,7 @@ def search_by_variant(variant: str, limit: int = 10) -> List[Dict[str, Any]]:
     if not results:
         return [{
             "message": f"No documentation found for variant: {variant}",
-            "suggestion": "Try common variants like 'hover', 'dark', 'responsive', or breakpoint names"
+            "suggestion": "Try common variants like 'hover', 'focus', 'dark', 'sm', 'md', 'lg', 'group', or 'peer'. Variant names should be lowercase without the colon."
         }]
 
     return results
